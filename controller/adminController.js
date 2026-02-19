@@ -880,7 +880,9 @@ export const AddAdminProduct = async (req, res) => {
       Category,
       tag,
       features,
-      specifications, gst, weight, hsn, sku
+      specifications, gst, weight, hsn, sku,  wholeRegularPrice,
+ wholeSalePrice,
+ moq
     } = req.body;
 
     // Validation
@@ -945,7 +947,10 @@ export const AddAdminProduct = async (req, res) => {
       Category,
       tag,
       features,
-      specifications: updatespecifications, gst, weight, hsn, sku
+      specifications: updatespecifications, gst, weight, hsn, sku, 
+       wholeRegularPrice,
+ wholeSalePrice,
+ moq
     });
 
 
@@ -1035,7 +1040,10 @@ export const updateProductAdmin = async (req, res) => {
       metaKeywords,
       Category,
       tag, features,
-      specifications, weight, gst, hsn, sku,  variant_products,type 
+      specifications, weight, gst, hsn, sku,  variant_products,type ,
+       wholeRegularPrice,
+ wholeSalePrice,
+ moq
     } = req.body;
 
     console.log('typp', type);
@@ -1056,7 +1064,9 @@ export const updateProductAdmin = async (req, res) => {
       metaKeywords,
       Category,
       tag, features,
-      specifications, weight, gst, hsn, sku,variant_products,type 
+      specifications, weight, gst, hsn, sku,variant_products,type , wholeRegularPrice,
+ wholeSalePrice,
+ moq
     };
 
     const Product = await productModel.findByIdAndUpdate(id, updateFields, {

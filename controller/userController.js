@@ -2602,7 +2602,7 @@ export const SignupLoginUser = async (req, res) => {
         return res.status(201).json({
           success: true,
           message: 'User found',
-          existingUser: { _id: existingUser._id, username: existingUser.username, phone: existingUser.phone, email: existingUser.email },
+          existingUser: { _id: existingUser._id, username: existingUser.username, phone: existingUser.phone, email: existingUser.email , type: existingUser.type},
           token: existingUser.token,
           otp: ecryptOTP,
           newotp : otp,
@@ -2637,7 +2637,7 @@ export const SignupLoginUser = async (req, res) => {
 
 export const SignupNewUser = async (req, res) => {
   try {
-    const { phone } = req.body;
+    const { phone,type } = req.body;
 
     // Generate OTP
     const otp = Math.floor(1000 + Math.random() * 9000);
@@ -2651,9 +2651,15 @@ export const SignupNewUser = async (req, res) => {
         message: 'Please fill all fields',
       });
     }
+    if((type !== '1' && type !== '2') || !type){
+         return res.status(400).json({
+        success: false,
+        message: 'Type is required',
+      });
+    }
 
     // Create a new user
-    const user = new userModel({ phone });
+    const user = new userModel({ phone,type });
     const token = jwt.sign({ userId: user._id }, secretKey, { expiresIn: '1h' });
     user.token = token; // Update the user's token field with the generated token
     await user.save();
@@ -2665,7 +2671,7 @@ export const SignupNewUser = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'User created successfully',
-      existingUser: { _id: user._id, username: user.username, phone: user.phone, email: user.email },
+      existingUser: { _id: user._id, username: user.username, phone: user.phone, email: user.email, type: user.type},
       otp: ecryptOTP,
       token,
        newotp : otp,
@@ -2719,12 +2725,17 @@ export const LoginUserWithOTP = async (req, res) => {
       return res.status(201).json({
         success: true,
         message: 'User found',
-        existingUser: { _id: existingUser._id, username: existingUser.username, phone: existingUser.phone, email: existingUser.email },
+        existingUser: { _id: existingUser._id, username: existingUser.username, phone: existingUser.phone, email: existingUser.email , type: existingUser.type},
         token: existingUser.token,
         otp: ecryptOTP,
          newotp : otp,
       });
 
+    }else{
+       return res.status(400).json({
+        success: false,
+        message: 'Sorry user not found',
+      });
     }
   } catch (error) {
     console.error('Error on signup:', error);
@@ -2769,7 +2780,7 @@ export const LoginUserWithPass = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'login sucesssfully with password',
-      existingUser: { _id: user._id, username: user.username, phone: user.phone, email: user.email },
+      existingUser: { _id: user._id, username: user.username, phone: user.phone, email: user.email,  type: user.type},
       token: user.token,
       checkpass: true,
     });
@@ -4162,6 +4173,7 @@ export const AuthUserByID = async (req, res) => {
             address: existingUser.address,
              pincode: existingUser.pincode, state: existingUser.state,
              verified: existingUser.verified,
+             type:existingUser.type,
           },
         });
 

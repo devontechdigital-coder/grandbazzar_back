@@ -58,9 +58,22 @@ const productSchema = new mongoose.Schema(
             type: Object,
         },
         type: {
-            type: Boolean,
-            default: false,
+            type: Number,
+            default: 0,
         },
+            wholeRegularPrice: {
+            type: Number,
+            default: 0,
+        },
+        wholeSalePrice: {
+            type: Number,
+            default: 0,
+        },
+           moq: {
+            type: Number,
+            default: 0,
+        },
+
         specifications: {
             type: Object,
             default: {
