@@ -3,9 +3,38 @@ import {
     SignupAdmin, Adminlogin, getAllGalleryController, deleteGalleryController, AddAdminBlogController, AdmindeleteBlogController, AddAdminCategoryController
     , getAllReviewsAdmin, AdmingetAllCategories, AddAdminProduct, getAllcategoryFillAdmin, updateCategoryAdmin, getCategoryIdAdmin, deleteCategoryAdmin, getAllProductFillAdmin, updateProductAdmin, getProductIdAdmin, deleteProductAdmin,
     AddAdminPromoController, getAllPromoAdmin, updatePromoAdmin, getPromoIdAdmin, deletePromoAdmin
-    , ChangePassAdmin, ForgotAdminPassword, editOrderAdmin, deleteOrderAdmin, AddAdminPageController, getAllPageAdmin, updatePageAdmin, getPageIdAdmin, deletePageAdmin, getAllBlogAdmin, exportAllProAdmin, importAllProAdmin, getAllUserAdmin, AddAdminTaxController, getAllTaxAdmin, updateTaxAdmin, getTaxIdAdmin, deleteTaxAdmin, ViewAllAdminZones, AddAdminZonesController, getAllZonesAdmin, updateZonesAdmin, getZonesIdAdmin, deleteZonesAdmin, GetImageAdmin, deleteFolderAdmin, UpdateFolderAdmin, getUserIdAdmin, GetFolderIDAdmin, AddAdminFolderController, GetFolderAdmin, editUserAdmin, AddAdminAttributeController, deleteRatingAdmin, editReviewAdmin, getAllOrderAdmin, getAllAttributeFillAdmin, updateAttributeAdmin, getAttributeIdAdmin, deleteAttributeAdmin, getAllAttribute, AddAdminTagController, getAllTagFillAdmin, updateTagAdmin, getTagIdAdmin, deleteTagAdmin, getAllTag, editHomeData, editHomeLayoutData,
+    , ChangePassAdmin, ForgotAdminPassword, editOrderAdmin, deleteOrderAdmin, AddAdminPageController, getAllPageAdmin, updatePageAdmin, getPageIdAdmin, deletePageAdmin, getAllBlogAdmin, exportAllProAdmin, importAllProAdmin, getAllUserAdmin, AddAdminTaxController, getAllTaxAdmin, updateTaxAdmin, getTaxIdAdmin, deleteTaxAdmin, ViewAllAdminZones, AddAdminZonesController, getAllZonesAdmin, updateZonesAdmin, getZonesIdAdmin, deleteZonesAdmin, GetImageAdmin, deleteFolderAdmin, UpdateFolderAdmin, getUserIdAdmin, GetFolderIDAdmin, AddAdminFolderController, GetFolderAdmin, editUserAdmin, AddAdminAttributeController, deleteRatingAdmin, editReviewAdmin, getAllOrderAdmin, getAllAttributeFillAdmin, updateAttributeAdmin, getAttributeIdAdmin, deleteAttributeAdmin, getAllAttribute, AddAdminTagController, getAllTagFillAdmin, updateTagAdmin, getTagIdAdmin, deleteTagAdmin, getAllTag, editHomeData, 
+    editHomeLayoutData,
+   
+  addAdminCountry,
+  getAllCountriesAdmin,
+  getCountryByIdAdmin,
+  updateCountryAdmin,
+  deleteCountryAdmin,
+    addAdminState,
+  getAllStatesAdmin,
+  getStateByIdAdmin,
+  updateStateAdmin,
+  deleteStateAdmin,   
+    addAdminCity,
+  getAllCitiesAdmin,
+  getCityByIdAdmin,
+  updateCityAdmin,
+  deleteCityAdmin,
+  viewAreasByCity,
+  addAdminArea,
+  updateAdminArea,
+  deleteAdminArea,
+  
+   addAdminTaxRule,
+  getAllTaxRulesAdmin,
+  getTaxRuleByIdAdmin,
+  updateTaxRuleAdmin,
+  deleteTaxRuleAdmin,
+
 } from "../controller/adminController.js";
-import {
+import {    viewAllCountries,  viewAllCitiesByState,viewAllStatesByCountry,estimateTax,syncLocationData,
+updateDetailsUser,
     AddCart, contactEnquire, razorpayCallback, UpdateCart, getCart, userTokenController, userBlogsController, Userlogin, SignupUser, getAllBlogsController, createBlogController,
     LoginAndVerifyOTP,updateBlogController, deleteBlogController, getBlogIdController, CreateChatController, findUserschatController, findchatController
  ,EmailVerify, postman ,PaymentResponse  ,PaymentRequest, getProductsByFilterUser, cancelOrderUser, ViewAllZones, getProductsByHSN,uploadDataZone,deleteAllZones, AuthUserByID, updateProfileUser, SignupNewUser, LoginUserWithOTP, LoginUserWithPass, SendOTP, SignupLoginUser, getTaxIdUser, ViewAllUserTaxes, ViewCompareByUser, applyPromoCode, getHomeLayoutData, AddWishListByUser, deleteCompareByUser, deleteWishListByUser, ViewWishListByUser, AddCompareByUser, ViewProductRating, ViewCategoryRating, AddRating, UsergetAllCategories, UsergetAllProducts, UsergetAllHomeProducts, userOrdersViewController, getAllAttributeUser, getProductIdUser, updateUserController, createOrderController, updateUserAndCreateOrderController, userOrdersController, getHomeData, GetAllCategoriesByParentIdController
@@ -16,6 +45,48 @@ import { uploadImage, handleImageUpload } from "../controller/adminController.js
 const router = express.Router();
 
 // admin routes
+
+
+/* -------- Public (active only) -------- */
+router.get("/countries", viewAllCountries);
+router.get("/states/:countryId", viewAllStatesByCountry);
+router.get("/cities/:stateId", viewAllCitiesByState);
+router.get("/areas/:cityId", viewAreasByCity);
+
+/* -------- Admin -------- */
+router.post("/admin/country", addAdminCountry);
+router.get("/admin/countries", getAllCountriesAdmin);
+router.get("/admin/country/:id", getCountryByIdAdmin);
+router.put("/admin/country/:id", updateCountryAdmin);
+router.delete("/admin/country/:id", deleteCountryAdmin);
+
+router.post("/admin/state", addAdminState);
+router.get("/admin/states", getAllStatesAdmin);
+router.get("/admin/state/:id", getStateByIdAdmin);
+router.put("/admin/state/:id", updateStateAdmin);
+router.delete("/admin/state/:id", deleteStateAdmin);
+
+router.post("/admin/city", addAdminCity);
+router.get("/admin/cities", getAllCitiesAdmin);
+router.get("/admin/city/:id", getCityByIdAdmin);
+router.put("/admin/city/:id", updateCityAdmin);
+router.delete("/admin/city/:id", deleteCityAdmin);
+
+/* Areas (embedded inside city) */
+router.post("/admin/city/:cityId/area", addAdminArea);
+router.put("/admin/city/:cityId/area/:areaId", updateAdminArea);
+router.delete("/admin/city/:cityId/area/:areaId", deleteAdminArea);
+
+/* Admin Tax Rules */
+router.post("/admin/tax-rule", addAdminTaxRule);
+router.get("/admin/tax-rules", getAllTaxRulesAdmin);
+router.get("/admin/tax-rule/:id", getTaxRuleByIdAdmin);
+router.put("/admin/tax-rule/:id", updateTaxRuleAdmin);
+router.delete("/admin/tax-rule/:id", deleteTaxRuleAdmin);
+
+/* Public/Checkout */
+router.post("/estimate", estimateTax);
+router.post("/estimate-tax", estimateTax);
 
 router.post('/admin/forgot', ForgotAdminPassword);
 router.post('/admin/change-pass', ChangePassAdmin);
@@ -267,6 +338,10 @@ router.get('/products-variations-hsn/:id', checkOrigin, getProductsByHSN);
 router.get('/products-variations-fillter/', checkOrigin, getProductsByFilterUser);
 
 router.post('/login-verify-otp/', checkOrigin, LoginAndVerifyOTP);
+
+router.get('/sync-location-data',  syncLocationData);
+router.put('/admin/update-user-details/:id',  updateDetailsUser);
+
 
   
 

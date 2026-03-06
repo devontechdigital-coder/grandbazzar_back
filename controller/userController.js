@@ -26,6 +26,11 @@ import https from 'https';
 import CryptoJS from 'crypto-js'; // Import the crypto module
 import axios from 'axios';
 import { cpSync } from "fs";
+import stateModel from "../models/stateModel.js";
+import cityModel from "../models/cityModel.js";
+import countryModel from "../models/countryModel.js";
+import slugify from "slugify";
+import taxRuleModel from "../models/taxRuleModel.js";
 
 
 dotenv.config();
@@ -919,7 +924,7 @@ export const updateUserAndCreateOrderController = async (req, res) => {
     shipping,
     status,
     totalAmount,
-    userId,verified
+    userId,verified,country,city
   } = req.body;
 
   try {
@@ -930,7 +935,7 @@ export const updateUserAndCreateOrderController = async (req, res) => {
     // Update user
     const user = await userModel.findByIdAndUpdate(
       id,
-      { username, email, pincode, address, state,verified },
+      { username, email, pincode, address, state,country,city,verified },
       { new: true }
     );
 
@@ -942,7 +947,7 @@ export const updateUserAndCreateOrderController = async (req, res) => {
     }
 
     // Create order for the updated user
-    if (!status || !mode || !details || !totalAmount || !userId || !payment) {
+    if (!status || !mode || !details || !totalAmount || !userId ) {
       return res.status(400).json({
         success: false,
         message: 'Please provide all fields for the order',
@@ -2335,6 +2340,159 @@ export const ViewAllZones = async (req, res) => {
 
 }
 
+/** Public: active countries */
+export const viewAllCountries = async (req, res) => {
+  try {
+    const countries = await countryModel.find({ status: true }).sort({ name: 1 }).lean();
+    return res.status(200).json({ success: true, countries });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+  }
+};
+
+
+export const viewAllStatesByCountry = async (req, res) => {
+  try {
+    const { countryId } = req.params;
+    const states = await stateModel.find({ countryId, status: true }).sort({ name: 1 }).lean();
+    return res.status(200).json({ success: true, states });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+  }
+};
+
+
+export const viewAllCitiesByState = async (req, res) => {
+  try {
+    const { stateId } = req.params;
+    const cities = await cityModel.find({ stateId, status: true }).sort({ name: 1 }).lean();
+    return res.status(200).json({ success: true, cities });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+  }
+};
+
+
+
+export const resolveTaxRule = async ({ countryId, stateId, cityId, areaId, categoryId }) => {
+  const now = new Date();
+
+  const baseQuery = {
+    status: true,
+    countryId,
+    $and: [
+      { $or: [{ effectiveFrom: null }, { effectiveFrom: { $lte: now } }] },
+      { $or: [{ effectiveTo: null }, { effectiveTo: { $gte: now } }] },
+    ],
+  };
+
+  // ✅ helper: prefer category rule, else fallback to categoryId:null
+  const findRule = async (q) => {  
+    if (categoryId) {
+      const catRule = await taxRuleModel.findOne({ ...q, categoryId })
+        .sort({ createdAt: -1 })
+        .lean();
+      if (catRule) return catRule;
+    }
+
+    return await taxRuleModel.findOne({ ...q, categoryId: null })
+      .sort({ createdAt: -1 })
+      .lean();
+  };
+
+  // 1) area level
+  if (areaId) {
+    const rule = await findRule({
+      ...baseQuery,
+      stateId: stateId ?? null,
+      cityId: cityId ?? null,
+      areaId,
+    });
+    if (rule) return rule;
+  }
+
+  // 2) city level
+  if (cityId) {
+    const rule = await findRule({
+      ...baseQuery,
+      stateId: stateId ?? null,
+      cityId,
+      areaId: null,
+    });
+    if (rule) return rule;
+  }
+
+  // 3) state level
+  if (stateId) {
+    const rule = await findRule({
+      ...baseQuery,
+      stateId,
+      cityId: null,
+      areaId: null,
+    });
+    if (rule) return rule;
+  }
+
+  // 4) country level
+  const rule = await findRule({
+    ...baseQuery,
+    stateId: null,
+    cityId: null,
+    areaId: null,
+  });
+
+  return rule || null;
+};
+
+
+/** API: Estimate tax on subtotal */
+ /** API: Estimate tax on subtotal */
+export const estimateTax = async (req, res) => {
+  try {
+    const { countryId, stateId, cityId, areaId, categoryId, subtotal } = req.body; // ✅ NEW
+
+    if (!countryId || subtotal === undefined) {
+      return res.status(400).json({ success: false, message: "countryId and subtotal are required" });
+    }
+
+    const rule = await resolveTaxRule({ countryId, stateId, cityId, areaId, categoryId }); // ✅ pass categoryId
+
+    if (!rule || rule.taxType === "NONE" || rule.rate === 0) {
+      return res.status(200).json({
+        success: true,
+        tax: { taxType: "NONE", rate: 0, taxAmount: 0, total: Number(subtotal) },
+        appliedRule: null,
+      });
+    }
+
+    const sub = Number(subtotal);
+
+    let taxAmount = (sub * rule.rate) / 100;
+    let total = sub + taxAmount;
+
+    if (rule.isInclusive) {
+      taxAmount = sub - sub / (1 + rule.rate / 100);
+      total = sub;
+    }
+
+    return res.status(200).json({
+      success: true,
+      tax: {
+        taxType: rule.taxType,
+        rate: rule.rate,
+        isInclusive: rule.isInclusive,
+        taxAmount: Number(taxAmount.toFixed(2)),
+        total: Number(total.toFixed(2)),
+      },
+      appliedRule: rule,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+  }
+};
+
+
+  
 
 export const ViewAllUserTaxes = async (req, res) => {
 
@@ -2419,6 +2577,288 @@ export const applyPromoCode = async (req, res) => {
 };
 
 
+export const syncLocationData_old = async () => {
+  try {
+    console.log("Fetching location data...");
+
+    const [countriesRes, statesRes, citiesRes] = await Promise.all([
+      axios.get(
+        "https://raw.githubusercontent.com/bhavingajjar/country-state-city-data/refs/heads/main/data/countries.json"
+      ),
+      axios.get(
+        "https://raw.githubusercontent.com/bhavingajjar/country-state-city-data/refs/heads/main/data/states.json"
+      ),
+      axios.get(
+        "https://raw.githubusercontent.com/bhavingajjar/country-state-city-data/refs/heads/main/data/cities.json"
+      ),
+    ]);
+
+    const countries = countriesRes.data;
+    const states = statesRes.data;
+    const cities = citiesRes.data;
+
+    console.log("Countries:", countries.length);
+    console.log("States:", states.length);
+    console.log("Cities:", cities.length);
+
+    // Map API IDs → Mongo IDs
+    const countryMap = {};
+    const stateMap = {};
+
+    /*
+    ---------------------------
+    1️⃣ Insert Countries
+    ---------------------------
+    */
+
+    for (const country of countries) {
+      const slug = slugify(country.name, { lower: true });
+
+      const existing = await countryModel.findOne({ slug });
+
+      let countryDoc;
+
+      if (existing) {
+        countryDoc = existing;
+      } else {
+        countryDoc = await countryModel.create({
+          name: country.name,
+          iso2: country.country_code,
+          slug,
+        });
+      }
+
+      countryMap[country.id] = countryDoc._id;
+    }
+
+    console.log("Countries synced");
+
+    /*
+    ---------------------------
+    2️⃣ Insert States
+    ---------------------------
+    */
+
+    for (const state of states) {
+      const countryId = countryMap[state.country_id];
+
+      if (!countryId) continue;
+
+      const slug = slugify(state.name, { lower: true });
+
+      const existing = await stateModel.findOne({
+        countryId,
+        slug,
+      });
+
+      let stateDoc;
+
+      if (existing) {
+        stateDoc = existing;
+      } else {
+        stateDoc = await stateModel.create({
+          name: state.name,
+          countryId,
+          slug,
+        });
+      }
+
+      stateMap[state.id] = stateDoc._id;
+    }
+
+    console.log("States synced");
+
+    /*
+    ---------------------------
+    3️⃣ Insert Cities
+    ---------------------------
+    */
+
+    for (const city of cities) {
+      const stateId = stateMap[city.state_id];
+      if (!stateId) continue;
+
+      const state = await stateModel.findById(stateId);
+
+      const slug = slugify(city.name, { lower: true });
+
+      const existing = await cityModel.findOne({
+        stateId,
+        slug,
+      });
+
+      if (existing) continue;
+
+      await cityModel.create({
+        name: city.name,
+        stateId,
+        countryId: state.countryId,
+        slug,
+      });
+    }
+
+    console.log("Cities synced");
+
+    console.log("Location data sync completed");
+  } catch (error) {
+    console.error("Location sync failed:", error);
+  }
+};
+
+export const syncLocationData = async () => {
+  try {
+    console.log("Fetching location data...");
+
+    const [countriesRes, statesRes, citiesRes] = await Promise.all([
+      axios.get(
+        "https://raw.githubusercontent.com/bhavingajjar/country-state-city-data/refs/heads/main/data/countries.json"
+      ),
+      axios.get(
+        "https://raw.githubusercontent.com/bhavingajjar/country-state-city-data/refs/heads/main/data/states.json"
+      ),
+      axios.get(
+        "https://raw.githubusercontent.com/bhavingajjar/country-state-city-data/refs/heads/main/data/cities.json"
+      ),
+    ]);
+
+    const countries = countriesRes.data;
+    const states = statesRes.data;
+    const cities = citiesRes.data;
+
+    console.log("Countries:", countries.length);
+    console.log("States:", states.length);
+    console.log("Cities:", cities.length);
+
+    const countryMap = {};
+    const stateMap = {};
+
+    /*
+    ---------------------------
+    1️⃣ Sync Countries
+    ---------------------------
+    */
+
+    const existingCountries = await countryModel.countDocuments();
+    console.log(`Resuming Countries from index ${existingCountries}`);
+
+    for (let i = 0; i < countries.length; i++) {
+      const country = countries[i];
+      const slug = slugify(country.name, { lower: true });
+
+      let countryDoc = await countryModel.findOne({ slug });
+
+      if (!countryDoc) {
+        countryDoc = await countryModel.create({
+          name: country.name,
+          iso2: country.country_code,
+          slug,
+        });
+      }
+
+      countryMap[country.id] = countryDoc._id;
+
+      const completed = i + 1;
+      const percent = ((completed / countries.length) * 100).toFixed(2);
+      const pending = countries.length - completed;
+
+      console.log(
+        `Countries: ${percent}% | Completed: ${completed} | Pending: ${pending}`
+      );
+    }
+
+    console.log("Countries synced");
+
+    /*
+    ---------------------------
+    2️⃣ Sync States
+    ---------------------------
+    */
+
+    const existingStates = await stateModel.countDocuments();
+    console.log(`Existing States in DB: ${existingStates}`);
+
+    for (let i = 0; i < states.length; i++) {
+      const state = states[i];
+
+      const countryId = countryMap[state.country_id];
+      if (!countryId) continue;
+
+      const slug = slugify(state.name, { lower: true });
+
+      let stateDoc = await stateModel.findOne({
+        countryId,
+        slug,
+      });
+
+      if (!stateDoc) {
+        stateDoc = await stateModel.create({
+          name: state.name,
+          countryId,
+          slug,
+        });
+      }
+
+      stateMap[state.id] = stateDoc._id;
+
+      const completed = i + 1;
+      const percent = ((completed / states.length) * 100).toFixed(2);
+      const pending = states.length - completed;
+
+      console.log(
+        `States: ${percent}% | Completed: ${completed} | Pending: ${pending}`
+      );
+    }
+
+    console.log("States synced");
+
+    /*
+    ---------------------------
+    3️⃣ Sync Cities
+    ---------------------------
+    */
+
+    const existingCities = await cityModel.countDocuments();
+    console.log(`Existing Cities in DB: ${existingCities}`);
+
+    for (let i = 0; i < cities.length; i++) {
+      const city = cities[i];
+
+      const stateId = stateMap[city.state_id];
+      if (!stateId) continue;
+
+      const state = await stateModel.findById(stateId);
+
+      const slug = slugify(city.name, { lower: true });
+
+      const existing = await cityModel.findOne({
+        stateId,
+        slug,
+      });
+
+      if (!existing) {
+        await cityModel.create({
+          name: city.name,
+          stateId,
+          countryId: state.countryId,
+          slug,
+        });
+      }
+
+      const completed = i + 1;
+      const percent = ((completed / cities.length) * 100).toFixed(2);
+      const pending = cities.length - completed;
+
+      console.log(
+        `Cities: ${percent}% | Completed: ${completed} | Pending: ${pending}`
+      );
+    }
+
+    console.log("Cities synced");
+    console.log("Location data sync completed");
+  } catch (error) {
+    console.error("Location sync failed:", error);
+  }
+};
 
 const sendRegOTP = async (phone, otp) => {
   try {
@@ -4174,6 +4614,9 @@ export const AuthUserByID = async (req, res) => {
              pincode: existingUser.pincode, state: existingUser.state,
              verified: existingUser.verified,
              type:existingUser.type,
+             country:existingUser.country,
+             city:existingUser.city,
+             state:existingUser.state,
           },
         });
 
@@ -4377,6 +4820,62 @@ export const cancelOrderUser = async (req, res) => {
   } catch (error) {
     return res.status(400).json({
       message: `Error while updating Rating: ${error}`,
+      success: false,
+      error,
+    });
+  }
+};
+
+
+export const updateDetailsUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      username,
+      address,
+      email,
+      pincode,
+      password,
+      gender,
+      state,
+      country,
+      statename,
+      city,
+      confirm_password,
+      about,
+      DOB
+    } = req.body;
+
+    let updateFields = {
+      username,
+      address,
+      gender,
+      country,
+      state,
+      city,
+       
+      about,
+      email,
+      pincode,
+      DOB
+    };
+
+    if (password.length > 0 && confirm_password.length > 0) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateFields.password = hashedPassword;
+    }
+
+    const user = await userModel.findByIdAndUpdate(id, updateFields, {
+      new: true,
+    });
+
+    return res.status(200).json({
+      message: "user Updated!",
+      success: true,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      message: `Error while updating Promo code: ${error}`,
       success: false,
       error,
     });

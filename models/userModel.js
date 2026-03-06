@@ -26,11 +26,26 @@ const userSchema = mongoose.Schema({
    type: {
     type: Number, 
   },
+     country: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Country",
+      default: null,
+    },
   state: {
-    type: String,
-  },statename: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "State",
+      default: null,
+    }
+    ,
+    statename: {
     type: String,
   },
+   // ✅ city
+    city: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "City",
+      default: null,
+    },
   address: {
     type: String,
   },

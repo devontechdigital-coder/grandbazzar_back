@@ -34,7 +34,11 @@ import nodemailer from "nodemailer";
 import jwt from 'jsonwebtoken';
 import wishlistModel from "../models/wishlistModel.js";
 import compareModel from "../models/compareModel.js";
-
+import countryModel from "../models/countryModel.js";
+import stateModel from "../models/stateModel.js";
+import cityModel from "../models/cityModel.js";
+import { getPaging } from "../utils/paging.js";
+import taxRuleModel from "../models/taxRuleModel.js";
 
 
 const storage = multer.diskStorage({
@@ -2620,6 +2624,528 @@ export const ViewAllAdminZones = async (req, res) => {
   }
 
 }
+
+// for country 
+
+/** Admin: add */
+export const addAdminCountry = async (req, res) => {
+  try {
+    const { name, iso2, currency, taxType, status, slug } = req.body;
+
+    if (!name || !slug) {
+      return res.status(400).json({ success: false, message: "Please provide name and slug" });
+    }
+
+    const newCountry = await countryModel.create({
+      name,
+      iso2,
+      currency,
+      taxType,
+      slug,
+      status: status ?? true,
+    });
+
+    return res.status(201).json({ success: true, message: "Country created!", country: newCountry });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while creating country", error: error.message });
+  }
+};
+
+/** Admin: list + pagination + search */
+export const getAllCountriesAdmin = async (req, res) => {
+  try {
+    const { page, limit, skip, searchTerm } = getPaging(req);
+
+    const query = {};
+    if (searchTerm) {
+      const regex = new RegExp(searchTerm, "i");
+      query.$or = [{ name: regex }, { iso2: regex }, { currency: regex }, { slug: regex }, { taxType: regex }];
+    }
+
+    const total = await countryModel.countDocuments(query);
+    const countries = await countryModel.find(query).sort({ _id: -1 }).skip(skip).limit(limit).lean();
+
+    if (!countries.length) {
+      return res.status(404).json({ success: false, message: "No countries found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "All countries list",
+      count: countries.length,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      countries,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: `Error while getting countries: ${error.message}` });
+  }
+};
+
+/** Admin: get by id */
+export const getCountryByIdAdmin = async (req, res) => {
+  try {
+    const country = await countryModel.findById(req.params.id).lean();
+    if (!country) return res.status(404).json({ success: false, message: "Country not found" });
+    return res.status(200).json({ success: true, country });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while getting country: ${error.message}` });
+  }
+};
+
+/** Admin: update */
+export const updateCountryAdmin = async (req, res) => {
+  try {
+    const updated = await countryModel.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();
+    if (!updated) return res.status(404).json({ success: false, message: "Country not found" });
+    return res.status(200).json({ success: true, message: "Country updated!", country: updated });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while updating country: ${error.message}` });
+  }
+};
+
+/** Admin: delete */
+export const deleteCountryAdmin = async (req, res) => {
+  try {
+    await countryModel.findByIdAndDelete(req.params.id);
+    return res.status(200).json({ success: true, message: "Country deleted!" });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while deleting country", error: error.message });
+  }
+};
+
+// for state 
+
+/** Admin: add */
+export const addAdminState = async (req, res) => {
+  try {
+    const { countryId, name, code, status, slug } = req.body;
+
+    if (!countryId || !name || !slug) {
+      return res.status(400).json({ success: false, message: "Please provide countryId, name, slug" });
+    }
+
+    const newState = await stateModel.create({
+      countryId,
+      name,
+      code,
+      slug,
+      status: status ?? true,
+    });
+
+    return res.status(201).json({ success: true, message: "State created!", state: newState });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while creating state", error: error.message });
+  }
+};
+
+/** Admin: list + pagination + search (+ optional countryId filter) */
+export const getAllStatesAdmin = async (req, res) => {
+  try {
+    const { page, limit, skip, searchTerm } = getPaging(req);
+
+    const query = {};
+    if (req.query.countryId) query.countryId = req.query.countryId;
+
+    if (searchTerm) {
+      const regex = new RegExp(searchTerm, "i");
+      query.$or = [{ name: regex }, { code: regex }, { slug: regex }];
+    }
+
+    const total = await stateModel.countDocuments(query);
+
+    const states = await stateModel.find(query)
+      .populate("countryId", "name iso2 slug")
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    if (!states.length) return res.status(404).json({ success: false, message: "No states found" });
+
+    return res.status(200).json({
+      success: true,
+      message: "All states list",
+      count: states.length,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      states,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: `Error while getting states: ${error.message}` });
+  }
+};
+
+/** Admin: get by id */
+export const getStateByIdAdmin = async (req, res) => {
+  try {
+    const state = await stateModel.findById(req.params.id).populate("countryId", "name iso2 slug").lean();
+    if (!state) return res.status(404).json({ success: false, message: "State not found" });
+    return res.status(200).json({ success: true, state });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while getting state: ${error.message}` });
+  }
+};
+
+/** Admin: update */
+export const updateStateAdmin = async (req, res) => {
+  try {
+    const updated = await stateModel.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();
+    if (!updated) return res.status(404).json({ success: false, message: "State not found" });
+    return res.status(200).json({ success: true, message: "State updated!", state: updated });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while updating state: ${error.message}` });
+  }
+};
+
+/** Admin: delete */
+export const deleteStateAdmin = async (req, res) => {
+  try {
+    await stateModel.findByIdAndDelete(req.params.id);
+    return res.status(200).json({ success: true, message: "State deleted!" });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while deleting state", error: error.message });
+  }
+};
+
+// for cities
+
+
+export const addAdminCity = async (req, res) => {
+  try {
+    const { countryId, stateId, name, slug, zipcode, lat, lng, status } = req.body;
+
+    if (!countryId || !stateId || !name || !slug) {
+      return res.status(400).json({ success: false, message: "Please provide countryId, stateId, name, slug" });
+    }
+
+    const newCity = await cityModel.create({
+      countryId,
+      stateId,
+      name,
+      slug,
+      zipcode,
+      lat,
+      lng,
+      status: status ?? true,
+      areas: [],
+    });
+
+    return res.status(201).json({ success: true, message: "City created!", city: newCity });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while creating city", error: error.message });
+  }
+};
+
+/** Admin: list cities + pagination + search (optional filters countryId/stateId) */
+export const getAllCitiesAdmin = async (req, res) => {
+  try {
+    const { page, limit, skip, searchTerm } = getPaging(req);
+
+    const query = {};
+    if (req.query.countryId) query.countryId = req.query.countryId;
+    if (req.query.stateId) query.stateId = req.query.stateId;
+
+    if (searchTerm) {
+      const regex = new RegExp(searchTerm, "i");
+      query.$or = [{ name: regex }, { slug: regex }, { zipcode: regex }];
+    }
+
+    const total = await cityModel.countDocuments(query);
+
+    const cities = await cityModel.find(query)
+      .populate("countryId", "name iso2 slug")
+      .populate("stateId", "name code slug")
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    if (!cities.length) return res.status(404).json({ success: false, message: "No cities found" });
+
+    return res.status(200).json({
+      success: true,
+      message: "All cities list",
+      count: cities.length,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      cities,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: `Error while getting cities: ${error.message}` });
+  }
+};
+
+/** Admin: get city by id */
+export const getCityByIdAdmin = async (req, res) => {
+  try {
+    const city = await cityModel.findById(req.params.id)
+      .populate("countryId", "name iso2 slug")
+      .populate("stateId", "name code slug")
+      .lean();
+
+    if (!city) return res.status(404).json({ success: false, message: "City not found" });
+    return res.status(200).json({ success: true, city });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while getting city: ${error.message}` });
+  }
+};
+
+/** Admin: update city */
+export const updateCityAdmin = async (req, res) => {
+  try {
+    const updated = await cityModel.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();
+    if (!updated) return res.status(404).json({ success: false, message: "City not found" });
+
+    return res.status(200).json({ success: true, message: "City updated!", city: updated });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while updating city: ${error.message}` });
+  }
+};
+
+/** Admin: delete city */
+export const deleteCityAdmin = async (req, res) => {
+  try {
+    await cityModel.findByIdAndDelete(req.params.id);
+    return res.status(200).json({ success: true, message: "City deleted!" });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while deleting city", error: error.message });
+  }
+};
+
+/* ------------------ AREAS (embedded) ------------------ */
+
+/** Public: active areas by city */
+export const viewAreasByCity = async (req, res) => {
+  try {
+    const { cityId } = req.params;
+
+    const city = await cityModel.findById(cityId).select("name slug areas status").lean();
+    if (!city) return res.status(404).json({ success: false, message: "City not found" });
+
+    const areas = (city.areas || []).filter((a) => a.status === true);
+    return res.status(200).json({ success: true, city: { _id: city._id, name: city.name, slug: city.slug }, areas });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+  }
+};
+
+/** Admin: add area in city */
+export const addAdminArea = async (req, res) => {
+  try {
+    const { cityId } = req.params;
+    const { name, slug, pincode, status } = req.body;
+
+    if (!name || !slug) {
+      return res.status(400).json({ success: false, message: "Please provide area name and slug" });
+    }
+
+    // Prevent duplicate area slug in same city
+    const exists = await cityModel.findOne({ _id: cityId, "areas.slug": slug }).lean();
+    if (exists) return res.status(400).json({ success: false, message: "Area slug already exists in this city" });
+
+    const updatedCity = await cityModel.findByIdAndUpdate(
+      cityId,
+      {
+        $push: {
+          areas: { name, slug, pincode, status: status ?? true },
+        },
+      },
+      { new: true }
+    ).lean();
+
+    if (!updatedCity) return res.status(404).json({ success: false, message: "City not found" });
+
+    return res.status(201).json({ success: true, message: "Area added!", city: updatedCity });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while adding area", error: error.message });
+  }
+};
+
+/** Admin: update area by areaId */
+export const updateAdminArea = async (req, res) => {
+  try {
+    const { cityId, areaId } = req.params;
+    const { name, slug, pincode, status } = req.body;
+
+    // If slug changing, check duplicate
+    if (slug) {
+      const dup = await cityModel.findOne({
+        _id: cityId,
+        areas: { $elemMatch: { slug, _id: { $ne: areaId } } },
+      }).lean();
+      if (dup) return res.status(400).json({ success: false, message: "Area slug already exists in this city" });
+    }
+
+    const updated = await cityModel.findOneAndUpdate(
+      { _id: cityId, "areas._id": areaId },
+      {
+        $set: {
+          ...(name !== undefined ? { "areas.$.name": name } : {}),
+          ...(slug !== undefined ? { "areas.$.slug": slug } : {}),
+          ...(pincode !== undefined ? { "areas.$.pincode": pincode } : {}),
+          ...(status !== undefined ? { "areas.$.status": status } : {}),
+        },
+      },
+      { new: true }
+    ).lean();
+
+    if (!updated) return res.status(404).json({ success: false, message: "City/Area not found" });
+
+    return res.status(200).json({ success: true, message: "Area updated!", city: updated });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while updating area", error: error.message });
+  }
+};
+
+/** Admin: delete area by areaId */
+export const deleteAdminArea = async (req, res) => {
+  try {
+    const { cityId, areaId } = req.params;
+
+    const updated = await cityModel.findByIdAndUpdate(
+      cityId,
+      { $pull: { areas: { _id: areaId } } },
+      { new: true }
+    ).lean();
+
+    if (!updated) return res.status(404).json({ success: false, message: "City not found" });
+
+    return res.status(200).json({ success: true, message: "Area deleted!", city: updated });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while deleting area", error: error.message });
+  }
+};
+
+ 
+
+ /** Admin: List tax rules (pagination + search) */
+export const getAllTaxRulesAdmin = async (req, res) => {
+  try {
+    const { page, limit, skip, searchTerm } = getPaging(req);
+
+    const query = {};
+    if (req.query.countryId) query.countryId = req.query.countryId;
+    if (req.query.stateId) query.stateId = req.query.stateId;
+    if (req.query.cityId) query.cityId = req.query.cityId;
+    if (req.query.areaId) query.areaId = req.query.areaId;
+
+    if (searchTerm) {
+      const regex = new RegExp(searchTerm, "i");
+      query.$or = [{ taxType: regex }, { areaSlug: regex }];
+    }
+
+    const total = await taxRuleModel.countDocuments(query);
+
+    const rules = await taxRuleModel.find(query)
+      .populate("countryId", "name iso2 slug taxType")
+      .populate("stateId", "name code slug")
+      .populate("cityId", "name slug")
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    if (!rules.length) {
+      return res.status(404).json({ success: false, message: "No tax rules found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "All tax rules",
+      count: rules.length,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      rules,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: `Error while getting tax rules: ${error.message}` });
+  }
+};
+
+
+/** Admin: List tax rules (pagination + search) */
+ export const addAdminTaxRule = async (req, res) => {
+  try {
+    const {
+      countryId,
+      stateId,
+      cityId,
+      areaId,
+      areaSlug,
+      categoryId, // ✅ NEW
+      taxType,
+      rate,
+      isInclusive,
+      effectiveFrom,
+      effectiveTo,
+      status,
+    } = req.body;
+
+    if (!countryId || rate === undefined) {
+      return res.status(400).json({ success: false, message: "countryId and rate are required" });
+    }
+
+    const rule = await taxRuleModel.create({
+      countryId,
+      stateId: stateId ?? null,
+      cityId: cityId ?? null,
+      areaId: areaId ?? null,
+      areaSlug: areaSlug ?? null,
+      categoryId: categoryId ?? null, // ✅ NEW (null = applies to all categories)
+      taxType: taxType ?? "NONE",
+      rate,
+      isInclusive: isInclusive ?? false,
+      effectiveFrom: effectiveFrom ?? null,
+      effectiveTo: effectiveTo ?? null,
+      status: status ?? true,
+    });
+
+    return res.status(201).json({ success: true, message: "Tax rule created!", rule });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error creating tax rule", error: error.message });
+  }
+};
+
+ /** Admin: Get by id */
+export const getTaxRuleByIdAdmin = async (req, res) => {
+  try {
+    const rule = await taxRuleModel.findById(req.params.id)
+      .populate("countryId", "name iso2 slug taxType")
+      .populate("stateId", "name code slug")
+      .populate("cityId", "name slug")
+      .populate("categoryId", "name slug") // ✅ NEW
+      .lean();
+
+    if (!rule) return res.status(404).json({ success: false, message: "Tax rule not found" });
+
+    return res.status(200).json({ success: true, rule });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while getting tax rule: ${error.message}` });
+  }
+};
+
+/** Admin: Update */
+export const updateTaxRuleAdmin = async (req, res) => {
+  try {
+    const updated = await taxRuleModel.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();
+    if (!updated) return res.status(404).json({ success: false, message: "Tax rule not found" });
+
+    return res.status(200).json({ success: true, message: "Tax rule updated!", rule: updated });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: `Error while updating tax rule: ${error.message}` });
+  }
+};
+
+/** Admin: Delete */
+export const deleteTaxRuleAdmin = async (req, res) => {
+  try {
+    await taxRuleModel.findByIdAndDelete(req.params.id);
+    return res.status(200).json({ success: true, message: "Tax rule deleted!" });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Error while deleting tax rule", error: error.message });
+  }
+};
 
 
 // for tax 
